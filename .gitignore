@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment dan rahasia
+.env
+.env.*
+!.env.example
+
+# Node / Frontend
+node_modules/
+dist/
+
+# Editor dan OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
