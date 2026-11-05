@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.v1 import auth, customers
+from app.api.v1 import auth, containers, customers
 from app.core.exceptions import AppError, app_error_handler
 
 app = FastAPI(
@@ -13,6 +13,7 @@ app.add_exception_handler(AppError, app_error_handler)
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(customers.router, prefix="/api/v1")
+app.include_router(containers.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])
