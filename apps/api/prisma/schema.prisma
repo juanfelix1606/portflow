@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoleName {
+  ADMIN
+  GATE_OPERATOR
+  YARD_OPERATOR
+
+  @@map("role_name")
+}
+
+enum ContainerSize {
+  TWENTY_FT
+  FORTY_FT
+  FORTY_FIVE_FT
+
+  @@map("container_size")
+}
+
+enum ContainerType {
+  DRY
+  REEFER
+  OPEN_TOP
+  FLAT_RACK
+  TANK
+
+  @@map("container_type")
+}
+
+enum TradeType {
+  IMPORT
+  EXPORT
+
+  @@map("trade_type")
+}
+
+enum ContainerStatus {
+  REGISTERED
+  IN_YARD
+  STORED
+  GATE_OUT
+  COMPLETED
+
+  @@map("container_status")
+}
+
+enum GateDirection {
+  IN
+  OUT
+
+  @@map("gate_direction")
+}
+
+model Role {
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  name      RoleName @unique
+  users     User[]
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("roles")
+}
+
+model User {
+  id                 String              @id @default(cuid()) @db.VarChar(30)
+  name               String              @db.VarChar(120)
+  email              String              @unique @db.VarChar(254)
+  passwordHash       String              @map("password_hash") @db.VarChar(255)
+  mustChangePassword Boolean             @default(false) @map("must_change_password")
+  authVersion        Int                 @default(0) @map("auth_version")
+  roleId             String              @map("role_id") @db.VarChar(30)
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  role               Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  gateTransactions   GateTransaction[]
+  movements          ContainerMovement[]
+  auditLogs          AuditLog[]
+  refreshTokens      RefreshToken[]
+
+  @@index([roleId])
+  @@index([isActive])
+  @@map("users")
+}
+
+model Container {
+  id               String              @id @default(cuid()) @db.VarChar(30)
+  containerNumber  String              @unique @map("container_number") @db.VarChar(11)
+  size             ContainerSize
+  type             ContainerType
+  tradeType        TradeType           @map("trade_type")
+  status           ContainerStatus     @default(REGISTERED)
+  currentYardId    String?             @map("current_yard_id") @db.VarChar(30)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  currentYard      Yard?               @relation("CurrentYard", fields: [currentYardId], references: [id], onDelete: Restrict)
+  gateTransactions GateTransaction[]
+  movements        ContainerMovement[]
+
+  @@index([status])
+  @@index([currentYardId])
+  @@index([createdAt])
+  @@map("containers")
+}
+
+model Yard {
+  id                String              @id @default(cuid()) @db.VarChar(30)
+  code              String              @unique @db.VarChar(40)
+  zone              String              @db.VarChar(40)
+  capacity          Int                 @default(1)
+  isActive          Boolean             @default(true) @map("is_active")
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  currentContainers Container[]         @relation("CurrentYard")
+  movementsFrom     ContainerMovement[] @relation("MovementFromYard")
+  movementsTo       ContainerMovement[] @relation("MovementToYard")
+
+  @@index([zone])
+  @@index([isActive])
+  @@map("yards")
+}
+
+model GateTransaction {
+  id           String        @id @default(cuid()) @db.VarChar(30)
+  containerId  String        @map("container_id") @db.VarChar(30)
+  operatorId   String        @map("operator_id") @db.VarChar(30)
+  direction    GateDirection
+  vehiclePlate String        @map("vehicle_plate") @db.VarChar(20)
+  driverName   String        @map("driver_name") @db.VarChar(120)
+  occurredAt   DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  container    Container     @relation(fields: [containerId], references: [id], onDelete: Restrict)
+  operator     User          @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+
+  @@unique([containerId, direction])
+  @@index([occurredAt])
+  @@index([operatorId, occurredAt])
+  @@map("gate_transactions")
+}
+
+model ContainerMovement {
+  id             String           @id @default(cuid()) @db.VarChar(30)
+  containerId    String           @map("container_id") @db.VarChar(30)
+  actorId        String           @map("actor_id") @db.VarChar(30)
+  previousStatus ContainerStatus? @map("previous_status")
+  nextStatus     ContainerStatus  @map("next_status")
+  fromYardId     String?          @map("from_yard_id") @db.VarChar(30)
+  fromYardCode   String?          @map("from_yard_code") @db.VarChar(40)
+  toYardId       String?          @map("to_yard_id") @db.VarChar(30)
+  toYardCode     String?          @map("to_yard_code") @db.VarChar(40)
+  description    String?          @db.VarChar(500)
+  occurredAt     DateTime         @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  container      Container        @relation(fields: [containerId], references: [id], onDelete: Restrict)
+  actor          User             @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  fromYard       Yard?            @relation("MovementFromYard", fields: [fromYardId], references: [id], onDelete: Restrict)
+  toYard         Yard?            @relation("MovementToYard", fields: [toYardId], references: [id], onDelete: Restrict)
+
+  @@index([containerId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@map("container_movements")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  actorId    String?  @map("actor_id") @db.VarChar(30)
+  actorEmail String   @map("actor_email") @db.VarChar(254)
+  action     String   @db.VarChar(80)
+  entityType String   @map("entity_type") @db.VarChar(80)
+  entityId   String   @map("entity_id") @db.VarChar(64)
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, occurredAt])
+  @@index([entityType, entityId, occurredAt])
+  @@map("audit_logs")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid()) @db.VarChar(30)
+  userId    String    @map("user_id") @db.VarChar(30)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
